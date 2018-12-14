@@ -1,6 +1,8 @@
 package com.test.mysql.repository;
 
 import com.test.mysql.entity.User;
+
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

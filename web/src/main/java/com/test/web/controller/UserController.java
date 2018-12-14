@@ -1,5 +1,6 @@
 package com.test.web.controller;
 
+import com.alibaba.fastjson.JSONObject;
 import com.test.mysql.entity.Department;
 import com.test.mysql.entity.Role;
 import com.test.mysql.entity.User;
@@ -7,10 +8,12 @@ import com.test.mysql.model.UserQo;
 import com.test.mysql.repository.DepartmentRepository;
 import com.test.mysql.repository.RoleRepository;
 import com.test.mysql.repository.UserRepository;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +28,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.ResponseBody;
+
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 import java.security.Principal;
 import java.util.*;
@@ -44,10 +50,13 @@ public class UserController {
     @Value("${securityconfig.urlroles}")
     private String urlroles;
 
+    @Autowired
+    JedisPool jedisPool;
+
     @RequestMapping("/index")
     public String index(ModelMap model, Principal user) throws Exception{
         Authentication authentication = (Authentication)user;
-        List<String> userroles = new ArrayList<>();
+        List<String> userroles = new ArrayList<String>();
         for(GrantedAuthority ga : authentication.getAuthorities()){
             userroles.add(ga.getAuthority());
         }
@@ -128,12 +137,24 @@ public class UserController {
 
     @RequestMapping(value="/save", method = RequestMethod.POST)
     @ResponseBody
+    //@Cacheable(cacheNames="zlg:user", key="#user.id")
     public String save(User user) throws Exception{
         user.setCreatedate(new Date());
         BCryptPasswordEncoder bpe = new BCryptPasswordEncoder();
         user.setPassword(bpe.encode(user.getPassword()));
         userRepository.save(user);
         logger.info("新增->ID="+user.getId());
+        //新增后添加到缓存中
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("连接不上redis");
+        }
+        JSONObject jsonUser= (JSONObject) JSONObject.toJSON(user);
+        jedis.set("user_" + user.getId(), jsonUser.toJSONString());
+        jedis.close();
         return "1";
     }
 
